@@ -1,0 +1,67 @@
+## Build results
+bin/
+obj/
+[Bb]uild/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Ww][Ii][Nn]32/
+[Ww][Ii][Nn]64/
+[Ll]og/
+[Ll]ogs/
+
+## Visual Studio files
+.vs/
+*.user
+*.suo
+*.sln.ide
+
+## Rider / JetBrains
+.idea/
+*.sln.iml
+
+## NuGet
+packages/
+*.nupkg
+project.lock.json
+project.assets.json
+*.nuget.props
+*.nuget.targets
+
+## .NET tools
+*.deps.json
+*.runtimeconfig.json
+*.runtimeconfig.dev.json
+
+## Publish profiles
+*.pubxml
+*.publishsettings
+
+## Temporary files
+*.tmp
+*.log
+*.svclog
+*.scc
+*.pdb
+
+## Test results
+TestResults/
+*.coverage
+*.coveragexml
+*.testsettings
+*.vsmdi
+
+## Resharper
+_ReSharper*/
+*.[Rr]e[Ss]harper
+*.DotSettings.user
+
+## Other IDE settings
+*.orig
+*.bak
+*.orig.*
+*.bak.*
+Thumbs.db
+ehthumbs.db
+Desktop.ini
