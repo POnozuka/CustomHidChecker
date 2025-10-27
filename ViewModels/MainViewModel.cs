@@ -1,7 +1,5 @@
 using System;
 using System.Collections.ObjectModel;
-using System.IO;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -15,12 +13,12 @@ namespace CustomHidChecker.ViewModels
 {
     public sealed class MainViewModel : ObservableObject
     {
-        private readonly ObservableCollection<LogEntryViewModel> _logEntries;
         private readonly ObservableCollection<HidDeviceInfo> _devices;
         private readonly Func<IHidDevice> _deviceFactory;
-        private readonly object _logLock = new();
-        private IHidDevice? _device;
-        private CancellationTokenSource? _readLoopCts;
+        private readonly DeviceDiscoveryService _deviceDiscovery;
+        private readonly DeviceLogService _logService;
+        private readonly HidReportFormatter _reportFormatter;
+        private readonly HidDeviceSession _session;
         private HidDeviceInfo? _selectedDevice;
         private string _outputReportText = string.Empty;
         private string _featureReportText = string.Empty;
@@ -40,7 +38,12 @@ namespace CustomHidChecker.ViewModels
         {
             _deviceFactory = deviceFactory;
             _devices = new ObservableCollection<HidDeviceInfo>();
-            _logEntries = new ObservableCollection<LogEntryViewModel>();
+            _deviceDiscovery = new DeviceDiscoveryService();
+            _logService = new DeviceLogService();
+            _reportFormatter = new HidReportFormatter();
+            _session = new HidDeviceSession(_deviceFactory);
+            _session.InputReportReceived += OnInputReportReceived;
+            _session.ReadErrorOccurred += OnReadErrorOccurred;
 
             RefreshDevicesCommand = new RelayCommand(_ => RefreshDevices(), _ => !IsBusy);
             ConnectCommand = new RelayCommand(_ => ConnectDevice(), _ => !IsBusy && !IsConnected && SelectedDevice != null);
@@ -48,15 +51,15 @@ namespace CustomHidChecker.ViewModels
             SendOutputCommand = new RelayCommand(_ => SendOutputReport(), _ => IsConnected);
             GetFeatureCommand = new RelayCommand(_ => GetFeatureReport(), _ => IsConnected);
             SetFeatureCommand = new RelayCommand(_ => SetFeatureReport(), _ => IsConnected);
-            ExportLogCommand = new RelayCommand(_ => ExportLog(), _ => _logEntries.Any());
-            ClearLogCommand = new RelayCommand(_ => ClearLog(), _ => _logEntries.Any());
+            ExportLogCommand = new RelayCommand(_ => ExportLog(), _ => _logService.HasEntries);
+            ClearLogCommand = new RelayCommand(_ => ClearLog(), _ => _logService.HasEntries);
 
             RefreshDevices();
         }
 
         public ObservableCollection<HidDeviceInfo> Devices => _devices;
 
-        public ObservableCollection<LogEntryViewModel> LogEntries => _logEntries;
+        public ObservableCollection<LogEntryViewModel> LogEntries => _logService.Entries;
 
         public HidDeviceInfo? SelectedDevice
         {
@@ -157,26 +160,23 @@ namespace CustomHidChecker.ViewModels
             {
                 IsBusy = true;
                 StatusMessage = "デバイスを検索しています...";
-                var devices = await Task.Run(HidEnumerator.Enumerate);
-                Application.Current.Dispatcher.Invoke(() =>
+                var devices = await _deviceDiscovery.EnumerateAsync().ConfigureAwait(true);
+                _devices.Clear();
+                foreach (var device in devices)
                 {
-                    _devices.Clear();
-                    foreach (var device in devices)
-                    {
-                        _devices.Add(device);
-                    }
+                    _devices.Add(device);
+                }
 
-                    if (_devices.Count > 0)
-                    {
-                        SelectedDevice = _devices[0];
-                        StatusMessage = $"{_devices.Count} 台のデバイスを検出";
-                    }
-                    else
-                    {
-                        SelectedDevice = null;
-                        StatusMessage = "HIDデバイスが見つかりません";
-                    }
-                });
+                if (_devices.Count > 0)
+                {
+                    SelectedDevice = _devices[0];
+                    StatusMessage = $"{_devices.Count} 台のデバイスを検出";
+                }
+                else
+                {
+                    SelectedDevice = null;
+                    StatusMessage = "HIDデバイスが見つかりません";
+                }
             }
             catch (Exception ex)
             {
@@ -201,14 +201,11 @@ namespace CustomHidChecker.ViewModels
             {
                 IsBusy = true;
                 StatusMessage = "接続中...";
-                _device = _deviceFactory();
-                if (!_device.Open(deviceInfo.DevicePath))
+                var result = await _session.ConnectAsync(deviceInfo, CancellationToken.None).ConfigureAwait(true);
+                if (!result.Success)
                 {
-                    var message = _device.LastErrorMessage ?? "不明な理由で接続に失敗";
-                    StatusMessage = message;
-                    AddLog(DeviceLogDirection.Error, message);
-                    _device.Dispose();
-                    _device = null;
+                    StatusMessage = result.Message ?? "接続に失敗";
+                    AddLog(DeviceLogDirection.Error, StatusMessage);
                     return;
                 }
 
@@ -216,9 +213,6 @@ namespace CustomHidChecker.ViewModels
                 StatusMessage = $"接続しました: {deviceInfo.DisplayName}";
                 AddLog(DeviceLogDirection.Info, "デバイスに接続", null);
                 ConnectedDeviceDetails = BuildDeviceDetails(deviceInfo);
-
-                _readLoopCts = new CancellationTokenSource();
-                _ = Task.Run(() => ReadLoopAsync(_readLoopCts.Token, deviceInfo.InputReportLength), _readLoopCts.Token);
             }
             catch (Exception ex)
             {
@@ -231,55 +225,9 @@ namespace CustomHidChecker.ViewModels
             }
         }
 
-        private async Task ReadLoopAsync(CancellationToken cancellationToken, int reportLength)
-        {
-            if (_device is null)
-            {
-                return;
-            }
-
-            var length = reportLength > 0 ? reportLength : 64;
-            var buffer = new byte[length];
-
-            while (!cancellationToken.IsCancellationRequested)
-            {
-                try
-                {
-                    var memory = buffer.AsMemory();
-                    var read = await _device.ReadAsync(memory, 1000, cancellationToken).ConfigureAwait(false);
-                    if (read > 0)
-                    {
-                        var data = memory.Slice(0, read).ToArray();
-                        AddLog(DeviceLogDirection.Input, "Input Report受信", data);
-                        UpdateLastInputReport(data);
-                    }
-                }
-                catch (OperationCanceledException)
-                {
-                    break;
-                }
-                catch (Exception ex)
-                {
-                    AddLog(DeviceLogDirection.Error, ex.Message);
-                    StatusMessage = $"読み取りエラー: {ex.Message}";
-                    await Application.Current.Dispatcher.InvokeAsync(DisconnectDevice);
-                    break;
-                }
-            }
-        }
-
         private void DisconnectDevice()
         {
-            _readLoopCts?.Cancel();
-            _readLoopCts?.Dispose();
-            _readLoopCts = null;
-
-            if (_device != null)
-            {
-                _device.Close();
-                _device.Dispose();
-                _device = null;
-            }
+            _session.Disconnect();
 
             if (IsConnected)
             {
@@ -295,23 +243,23 @@ namespace CustomHidChecker.ViewModels
 
         private void SendOutputReport()
         {
-            if (_device is null || SelectedDevice is null)
+            if (!IsConnected || SelectedDevice is null)
             {
                 return;
             }
 
             var deviceInfo = SelectedDevice;
-            var report = BuildReportBuffer(OutputReportText, deviceInfo.OutputReportLength, out var errorMessage);
-            if (report is null)
+            var length = _reportFormatter.NormalizeLength(deviceInfo.OutputReportLength);
+            if (!_reportFormatter.TryCreateReport(OutputReportText, length, out var report, out var errorMessage))
             {
-                StatusMessage = errorMessage;
-                AddLog(DeviceLogDirection.Error, errorMessage);
+                StatusMessage = errorMessage ?? "出力データが不正";
+                AddLog(DeviceLogDirection.Error, StatusMessage);
                 return;
             }
 
             _ = Task.Run(async () =>
             {
-                var success = await _device.WriteAsync(report, CancellationToken.None).ConfigureAwait(false);
+                var success = await _session.WriteOutputAsync(report!, CancellationToken.None).ConfigureAwait(false);
                 Application.Current.Dispatcher.Invoke(() =>
                 {
                     if (success)
@@ -321,7 +269,7 @@ namespace CustomHidChecker.ViewModels
                     }
                     else
                     {
-                        var message = _device.LastErrorMessage ?? "送信に失敗";
+                        var message = _session.LastError ?? "送信に失敗";
                         StatusMessage = message;
                         AddLog(DeviceLogDirection.Error, message);
                     }
@@ -331,63 +279,57 @@ namespace CustomHidChecker.ViewModels
 
         private void GetFeatureReport()
         {
-            if (_device is null || SelectedDevice is null)
+            if (!IsConnected || SelectedDevice is null)
             {
                 return;
             }
 
             var deviceInfo = SelectedDevice;
-            var featureLength = deviceInfo.FeatureReportLength > 0 ? deviceInfo.FeatureReportLength : 64;
-            var buffer = new byte[featureLength];
-
-            if (!HexConverter.TryParseHexString(FeatureReportText, buffer, out var written) || written == 0)
+            var length = _reportFormatter.NormalizeLength(deviceInfo.FeatureReportLength);
+            if (!_reportFormatter.TryCreateReport(FeatureReportText, length, out var buffer, out var errorMessage))
             {
-                var message = "Feature Report IDを先頭に指定してください";
-                StatusMessage = message;
-                AddLog(DeviceLogDirection.Error, message);
+                StatusMessage = errorMessage ?? "Feature Reportが不正";
+                AddLog(DeviceLogDirection.Error, StatusMessage);
                 return;
             }
 
-            if (!_device.GetFeature(buffer))
+            if (!_session.TryGetFeature(buffer!, out var getError))
             {
-                var error = _device.LastErrorMessage ?? "Feature Report取得に失敗";
-                StatusMessage = error;
-                AddLog(DeviceLogDirection.Error, error);
+                StatusMessage = getError ?? "Feature Report取得に失敗";
+                AddLog(DeviceLogDirection.Error, StatusMessage);
                 return;
             }
 
-            FeatureReportText = HexConverter.ToHexString(buffer);
+            FeatureReportText = HexConverter.ToHexString(buffer!);
             StatusMessage = "Feature Report取得完了";
             AddLog(DeviceLogDirection.FeatureIn, "Feature Report受信", buffer);
         }
 
         private void SetFeatureReport()
         {
-            if (_device is null || SelectedDevice is null)
+            if (!IsConnected || SelectedDevice is null)
             {
                 return;
             }
 
             var deviceInfo = SelectedDevice;
-            var report = BuildReportBuffer(FeatureReportText, deviceInfo.FeatureReportLength > 0 ? deviceInfo.FeatureReportLength : 64, out var errorMessage);
-            if (report is null)
+            var length = _reportFormatter.NormalizeLength(deviceInfo.FeatureReportLength);
+            if (!_reportFormatter.TryCreateReport(FeatureReportText, length, out var report, out var errorMessage))
             {
-                StatusMessage = errorMessage;
-                AddLog(DeviceLogDirection.Error, errorMessage);
+                StatusMessage = errorMessage ?? "Feature Reportが不正";
+                AddLog(DeviceLogDirection.Error, StatusMessage);
                 return;
             }
 
-            var success = _device.SetFeature(report);
-            if (success)
+            if (_session.TrySetFeature(report!, out var setError))
             {
                 StatusMessage = "Feature Report送信完了";
                 AddLog(DeviceLogDirection.FeatureOut, "Feature Report送信", report);
             }
             else
             {
-                var message = _device.LastErrorMessage ?? "Feature Report送信に失敗";
-                StatusMessage = message;
-                AddLog(DeviceLogDirection.Error, message);
+                StatusMessage = setError ?? "Feature Report送信に失敗";
+                AddLog(DeviceLogDirection.Error, StatusMessage);
             }
         }
 
@@ -406,21 +348,15 @@ namespace CustomHidChecker.ViewModels
 
             try
             {
-                using var writer = new StreamWriter(dialog.FileName);
-                writer.WriteLine("Timestamp,Direction,Message,Payload");
-                foreach (var entry in _logEntries)
+                if (_logService.TryExport(dialog.FileName, out var error))
                 {
-                    var line = string.Join(",", new[]
-                    {
-                        EscapeCsv(entry.Timestamp),
-                        EscapeCsv(entry.Direction),
-                        EscapeCsv(entry.Message),
-                        EscapeCsv(entry.Payload)
-                    });
-                    writer.WriteLine(line);
+                    StatusMessage = "ログをエクスポートしました";
                 }
-
-                StatusMessage = "ログをエクスポートしました";
+                else
+                {
+                    StatusMessage = $"エクスポートに失敗: {error}";
+                    AddLog(DeviceLogDirection.Error, StatusMessage);
+                }
             }
             catch (Exception ex)
             {
@@ -431,47 +367,15 @@ namespace CustomHidChecker.ViewModels
 
         private void ClearLog()
         {
-            Application.Current.Dispatcher.Invoke(_logEntries.Clear);
+            _logService.Clear();
             StatusMessage = "ログをクリアしました";
-        }
-
-        private byte[]? BuildReportBuffer(string input, int length, out string errorMessage)
-        {
-            var effectiveLength = length > 0 ? length : 64;
-            var buffer = new byte[effectiveLength];
-            if (!HexConverter.TryParseHexString(input, buffer, out var written))
-            {
-                errorMessage = "HEX形式が不正です";
-                return null;
-            }
-
-            if (written == 0)
-            {
-                errorMessage = "Report IDを先頭に指定してください";
-                return null;
-            }
-
-            errorMessage = string.Empty;
-            return buffer;
+            RaiseCommandStates();
         }
 
         private void AddLog(DeviceLogDirection direction, string message, byte[]? payload = null)
         {
-            var entry = new LogEntryViewModel(new DeviceLogEntry(direction, message, payload));
-            Application.Current.Dispatcher.Invoke(() =>
-            {
-                lock (_logLock)
-                {
-                    if (_logEntries.Count > 1000)
-                    {
-                        _logEntries.RemoveAt(0);
-                    }
-
-                    _logEntries.Add(entry);
-                }
-
-                RaiseCommandStates();
-            });
+            _logService.Add(direction, message, payload);
+            RaiseCommandStates();
         }
 
         private void RaiseCommandStates()
@@ -486,14 +390,17 @@ namespace CustomHidChecker.ViewModels
             ClearLogCommand.RaiseCanExecuteChanged();
         }
 
-        private static string EscapeCsv(string value)
+        private void OnInputReportReceived(object? sender, byte[] data)
         {
-            if (value.Contains(',') || value.Contains('"'))
-            {
-                return $"\"{value.Replace("\"", "\"\"")}\"";
-            }
+            AddLog(DeviceLogDirection.Input, "Input Report受信", data);
+            UpdateLastInputReport(data);
+        }
 
-            return value;
+        private void OnReadErrorOccurred(object? sender, string message)
+        {
+            StatusMessage = $"読み取りエラー: {message}";
+            AddLog(DeviceLogDirection.Error, message);
+            Application.Current.Dispatcher.Invoke(DisconnectDevice);
         }
 
         private static string BuildDeviceDetails(HidDeviceInfo info)
