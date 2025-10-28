@@ -19,6 +19,7 @@ namespace CustomHidChecker.ViewModels
         private readonly DeviceLogService _logService;
         private readonly HidReportFormatter _reportFormatter;
         private readonly HidDeviceSession _session;
+        private readonly UsbDescriptorService _descriptorService;
         private HidDeviceInfo? _selectedDevice;
         private string _outputReportText = string.Empty;
         private string _featureReportText = string.Empty;
@@ -26,6 +27,7 @@ namespace CustomHidChecker.ViewModels
         private string _connectedDeviceDetails = "未接続";
         private string _lastInputReport = "未受信";
         private string _lastInputReportTimestamp = "-";
+        private UsbDescriptorInfo _descriptorInfo = UsbDescriptorInfo.Empty;
         private bool _isConnected;
         private bool _isBusy;
 
@@ -42,6 +44,7 @@ namespace CustomHidChecker.ViewModels
             _logService = new DeviceLogService();
             _reportFormatter = new HidReportFormatter();
             _session = new HidDeviceSession(_deviceFactory);
+            _descriptorService = new UsbDescriptorService();
             _session.InputReportReceived += OnInputReportReceived;
             _session.ReadErrorOccurred += OnReadErrorOccurred;
 
@@ -107,6 +110,12 @@ namespace CustomHidChecker.ViewModels
         {
             get => _lastInputReportTimestamp;
             private set => SetProperty(ref _lastInputReportTimestamp, value);
+        }
+
+        public UsbDescriptorInfo DescriptorInfo
+        {
+            get => _descriptorInfo;
+            private set => SetProperty(ref _descriptorInfo, value);
         }
 
         public bool IsConnected
@@ -213,6 +222,7 @@ namespace CustomHidChecker.ViewModels
                 StatusMessage = $"接続しました: {deviceInfo.DisplayName}";
                 AddLog(DeviceLogDirection.Info, "デバイスに接続", null);
                 ConnectedDeviceDetails = BuildDeviceDetails(deviceInfo);
+                DescriptorInfo = _descriptorService.GetDescriptors(deviceInfo);
             }
             catch (Exception ex)
             {
@@ -239,6 +249,7 @@ namespace CustomHidChecker.ViewModels
             ConnectedDeviceDetails = "未接続";
             LastInputReport = "未受信";
             LastInputReportTimestamp = "-";
+            DescriptorInfo = UsbDescriptorInfo.Empty;
         }
 
         private void SendOutputReport()

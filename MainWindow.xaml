@@ -68,7 +68,42 @@
                     <TextBlock Text="{Binding ConnectedDeviceDetails}" Margin="12" TextWrapping="Wrap" />
                 </GroupBox>
 
-                <GroupBox Header="Input Report">
+                <GroupBox Header="USBディスクリプタ情報" Margin="0,12,0,0">
+                    <TabControl Margin="8">
+                        <TabItem Header="Device">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                <TextBox Text="{Binding DescriptorInfo.DeviceDescriptor, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap" AcceptsReturn="True" BorderThickness="0" Background="Transparent" />
+                            </ScrollViewer>
+                        </TabItem>
+                        <TabItem Header="Configuration">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                <TextBox Text="{Binding DescriptorInfo.ConfigurationDescriptor, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap" AcceptsReturn="True" BorderThickness="0" Background="Transparent" />
+                            </ScrollViewer>
+                        </TabItem>
+                        <TabItem Header="Interface">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                <TextBox Text="{Binding DescriptorInfo.InterfaceDescriptor, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap" AcceptsReturn="True" BorderThickness="0" Background="Transparent" />
+                            </ScrollViewer>
+                        </TabItem>
+                        <TabItem Header="Endpoint">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                <TextBox Text="{Binding DescriptorInfo.EndpointDescriptor, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap" AcceptsReturn="True" BorderThickness="0" Background="Transparent" />
+                            </ScrollViewer>
+                        </TabItem>
+                        <TabItem Header="HID">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                <TextBox Text="{Binding DescriptorInfo.HidDescriptor, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap" AcceptsReturn="True" BorderThickness="0" Background="Transparent" />
+                            </ScrollViewer>
+                        </TabItem>
+                        <TabItem Header="Report">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                <TextBox Text="{Binding DescriptorInfo.ReportDescriptor, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap" AcceptsReturn="True" BorderThickness="0" Background="Transparent" FontFamily="Consolas" />
+                            </ScrollViewer>
+                        </TabItem>
+                    </TabControl>
+                </GroupBox>
+
+                <GroupBox Header="Input Report" Margin="0,12,0,0">
                     <StackPanel Margin="12">
                         <TextBlock Text="最終受信時刻:" FontWeight="Bold" />
                         <TextBlock Text="{Binding LastInputReportTimestamp}" Margin="0,0,0,8" />

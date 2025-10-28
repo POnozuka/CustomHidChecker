@@ -47,6 +47,12 @@ namespace CustomHidChecker.Services
         internal static extern bool HidD_FreePreparsedData(IntPtr preparsedData);
 
         [DllImport("hid.dll", SetLastError = true)]
+        internal static extern bool HidD_GetHidDescriptor(SafeFileHandle hidDeviceObject, ref HidDescriptor descriptor, int descriptorLength);
+
+        [DllImport("hid.dll", SetLastError = true)]
+        internal static extern bool HidD_GetReportDescriptor(SafeFileHandle hidDeviceObject, byte[] reportBuffer, int reportBufferLength);
+
+        [DllImport("hid.dll", SetLastError = true)]
         internal static extern bool HidD_GetProductString(SafeFileHandle hidDeviceObject, byte[] buffer, int bufferLength);
 
         [DllImport("hid.dll", SetLastError = true)]
@@ -114,6 +120,24 @@ namespace CustomHidChecker.Services
             public ushort VendorID;
             public ushort ProductID;
             public ushort VersionNumber;
+        }
+
+        [StructLayout(LayoutKind.Sequential, Pack = 1)]
+        internal struct HidClassDescriptor
+        {
+            public byte DescriptorType;
+            public ushort DescriptorLength;
+        }
+
+        [StructLayout(LayoutKind.Sequential, Pack = 1)]
+        internal struct HidDescriptor
+        {
+            public byte Length;
+            public byte DescriptorType;
+            public ushort HidSpecification;
+            public byte CountryCode;
+            public byte DescriptorCount;
+            public HidClassDescriptor Descriptor0;
         }
 
         [StructLayout(LayoutKind.Sequential)]
@@ -214,6 +238,33 @@ namespace CustomHidChecker.Services
             }
 
             return false;
+        }
+
+        internal static HidDescriptor GetHidDescriptor(SafeFileHandle handle)
+        {
+            var descriptor = new HidDescriptor
+            {
+                Length = (byte)Marshal.SizeOf<HidDescriptor>()
+            };
+
+            if (!HidD_GetHidDescriptor(handle, ref descriptor, Marshal.SizeOf<HidDescriptor>()))
+            {
+                throw new Win32Exception(Marshal.GetLastWin32Error());
+            }
+
+            return descriptor;
+        }
+
+        internal static byte[] GetReportDescriptor(SafeFileHandle handle, int expectedLength)
+        {
+            var length = expectedLength > 0 ? expectedLength : 1024;
+            var buffer = new byte[length];
+            if (HidD_GetReportDescriptor(handle, buffer, buffer.Length))
+            {
+                return buffer;
+            }
+
+            throw new Win32Exception(Marshal.GetLastWin32Error());
         }
 
         internal static string GetLastErrorMessage()
