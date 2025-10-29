@@ -18,7 +18,10 @@ namespace CustomHidChecker.Models
             string? instanceId,
             string? serialNumber,
             int topLevelCollectionIndex,
-            int topLevelCollectionTotal)
+            int topLevelCollectionTotal,
+            IReadOnlyList<byte>? inputReportIds,
+            IReadOnlyList<byte>? outputReportIds,
+            IReadOnlyList<byte>? featureReportIds)
         {
             DevicePath = devicePath ?? throw new ArgumentNullException(nameof(devicePath));
             VendorId = vendorId;
@@ -34,6 +37,9 @@ namespace CustomHidChecker.Models
             SerialNumber = serialNumber;
             TopLevelCollectionIndex = topLevelCollectionIndex;
             TopLevelCollectionTotal = topLevelCollectionTotal;
+            InputReportIds = inputReportIds ?? Array.Empty<byte>();
+            OutputReportIds = outputReportIds ?? Array.Empty<byte>();
+            FeatureReportIds = featureReportIds ?? Array.Empty<byte>();
         }
 
         public string DevicePath { get; }
@@ -63,6 +69,12 @@ namespace CustomHidChecker.Models
         public string? InstanceId { get; }
 
         public string? SerialNumber { get; }
+
+        public IReadOnlyList<byte> InputReportIds { get; }
+
+        public IReadOnlyList<byte> OutputReportIds { get; }
+
+        public IReadOnlyList<byte> FeatureReportIds { get; }
 
 
         public string DisplayName

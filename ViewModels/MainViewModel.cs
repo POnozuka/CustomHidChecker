@@ -422,7 +422,18 @@ namespace CustomHidChecker.ViewModels
             var topLevelCollections = info.TopLevelCollectionCount > 0 ? info.TopLevelCollectionCount.ToString() : "不明";
             var topLevelCollectionPosition = info.TopLevelCollectionIndex;
 
-            return $"名称: {info.DisplayName}\nVID:0x{info.VendorId:X4} / PID:0x{info.ProductId:X4} / バージョン: 0x{info.VersionNumber:X4} / TLC: {topLevelCollectionPosition} (Nodes: {topLevelCollections})\nInput Report: {inputLength} bytes / Output Report: {outputLength} bytes / Feature Report: {featureLength} bytes";
+            static string FormatReportIds(string title, IReadOnlyList<byte> ids)
+            {
+                return ids.Count > 0
+                    ? $"{title}: {string.Join(" ", ids.Select(id => $"{id:X2}"))}"
+                    : $"{title}: (なし)";
+            }
+
+            var inputIds = FormatReportIds("Input Report IDs", info.InputReportIds);
+            var outputIds = FormatReportIds("Output Report IDs", info.OutputReportIds);
+            var featureIds = FormatReportIds("Feature Report IDs", info.FeatureReportIds);
+
+            return $"名称: {info.DisplayName}\nVID:0x{info.VendorId:X4} / PID:0x{info.ProductId:X4} / バージョン: 0x{info.VersionNumber:X4} / TLC: {topLevelCollectionPosition} (Nodes: {topLevelCollections})\nInput Report: {inputLength} bytes / Output Report: {outputLength} bytes / Feature Report: {featureLength} bytes\n{inputIds}\n{outputIds}\n{featureIds}";
         }
 
         private void UpdateLastInputReport(byte[] data)

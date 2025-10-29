@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
+using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -200,21 +201,10 @@ namespace CustomHidChecker.Services
 
                 var topLevelCollectionTotal = Math.Max(1, (int)caps.NumberLinkCollectionNodes);
 
-                try
+                var reportIdDetails = GetReportIdDetails(handle, caps);
+                if (reportIdDetails is { TotalUniqueCount: > 0 })
                 {
-                    var reportDescriptor = TryGetReportDescriptor(handle);
-                    if (reportDescriptor is { Length: > 0 })
-                    {
-                        var counted = CountTopLevelCollections(reportDescriptor);
-                        if (counted > 0)
-                        {
-                            topLevelCollectionTotal = counted;
-                        }
-                    }
-                }
-                catch
-                {
-                    topLevelCollectionTotal = Math.Max(topLevelCollectionTotal, 1);
+                    topLevelCollectionTotal = Math.Max(topLevelCollectionTotal, reportIdDetails.TotalUniqueCount);
                 }
 
                 if (topLevelCollectionTotal < topLevelCollectionIndex)
@@ -237,7 +227,10 @@ namespace CustomHidChecker.Services
                     string.IsNullOrWhiteSpace(instanceId) ? null : instanceId,
                     string.IsNullOrWhiteSpace(serialNumber) ? null : serialNumber,
                     topLevelCollectionIndex,
-                    topLevelCollectionTotal
+                    topLevelCollectionTotal,
+                    reportIdDetails?.InputReportIds ?? Array.Empty<byte>(),
+                    reportIdDetails?.OutputReportIds ?? Array.Empty<byte>(),
+                    reportIdDetails?.FeatureReportIds ?? Array.Empty<byte>()
                 );
             }
             catch
@@ -246,102 +239,83 @@ namespace CustomHidChecker.Services
             }
         }
 
-        private static byte[]? TryGetReportDescriptor(SafeFileHandle handle)
+        private static ReportIdDetails? GetReportIdDetails(SafeFileHandle handle, in HidNativeMethods.HidP_Caps caps)
         {
-            var buffer = new byte[4096];
-            if (!HidNativeMethods.HidD_GetReportDescriptor(handle, buffer, buffer.Length))
+            if (!HidNativeMethods.HidD_GetPreparsedData(handle, out var preparsedData))
             {
                 return null;
             }
 
-            var length = buffer.Length;
-            while (length > 0 && buffer[length - 1] == 0)
+            try
             {
-                length--;
-            }
+                var inputIds = new HashSet<byte>();
+                var outputIds = new HashSet<byte>();
+                var featureIds = new HashSet<byte>();
 
-            if (length <= 0)
+                CollectReportIds(inputIds, preparsedData, HidNativeMethods.HidP_ReportType.Input, caps.NumberInputButtonCaps, caps.NumberInputValueCaps);
+                CollectReportIds(outputIds, preparsedData, HidNativeMethods.HidP_ReportType.Output, caps.NumberOutputButtonCaps, caps.NumberOutputValueCaps);
+                CollectReportIds(featureIds, preparsedData, HidNativeMethods.HidP_ReportType.Feature, caps.NumberFeatureButtonCaps, caps.NumberFeatureValueCaps);
+
+                return new ReportIdDetails(inputIds, outputIds, featureIds);
+            }
+            finally
             {
-                return null;
+                HidNativeMethods.HidD_FreePreparsedData(preparsedData);
             }
-
-            if (length == buffer.Length)
-            {
-                return buffer;
-            }
-
-            var descriptor = new byte[length];
-            Array.Copy(buffer, descriptor, length);
-            return descriptor;
         }
 
-        private static int CountTopLevelCollections(byte[] descriptor)
+        private static void CollectReportIds(HashSet<byte> reportIds, IntPtr preparsedData, HidNativeMethods.HidP_ReportType reportType, short buttonCapsCount, short valueCapsCount)
         {
-            var depth = 0;
-            var topLevelCount = 0;
-            var index = 0;
-
-            while (index < descriptor.Length)
+            if (buttonCapsCount > 0)
             {
-                var prefix = descriptor[index++];
-
-                if (prefix == 0xFE)
+                var length = (ushort)buttonCapsCount;
+                var buttonCaps = new HidNativeMethods.HidP_ButtonCaps[length];
+                var status = HidNativeMethods.HidP_GetButtonCaps(reportType, buttonCaps, ref length, preparsedData);
+                if (status >= 0)
                 {
-                    if (index + 1 >= descriptor.Length)
+                    for (var i = 0; i < length; i++)
                     {
-                        break;
-                    }
-
-                    var size = descriptor[index];
-                    index += 2;
-                    if (index + size > descriptor.Length)
-                    {
-                        break;
-                    }
-
-                    index += size;
-                    continue;
-                }
-
-                var sizeCode = prefix & 0x03;
-                var type = (prefix >> 2) & 0x03;
-                var tag = (prefix >> 4) & 0x0F;
-
-                var dataLength = sizeCode switch
-                {
-                    0 => 0,
-                    1 => 1,
-                    2 => 2,
-                    3 => 4,
-                    _ => 0
-                };
-
-                if (index + dataLength > descriptor.Length)
-                {
-                    break;
-                }
-
-                if (type == 0 && tag == 0x0A)
-                {
-                    if (depth == 0)
-                    {
-                        topLevelCount++;
-                    }
-
-                    depth++;
-                }
-                else if (type == 0 && tag == 0x0C)
-                {
-                    if (depth > 0)
-                    {
-                        depth--;
+                        reportIds.Add(buttonCaps[i].ReportID);
                     }
                 }
-
-                index += dataLength;
             }
 
-            return topLevelCount > 0 ? topLevelCount : 1;
+            if (valueCapsCount > 0)
+            {
+                var length = (ushort)valueCapsCount;
+                var valueCaps = new HidNativeMethods.HidP_ValueCaps[length];
+                var status = HidNativeMethods.HidP_GetValueCaps(reportType, valueCaps, ref length, preparsedData);
+                if (status >= 0)
+                {
+                    for (var i = 0; i < length; i++)
+                    {
+                        reportIds.Add(valueCaps[i].ReportID);
+                    }
+                }
+            }
+        }
+
+        private sealed class ReportIdDetails
+        {
+            internal ReportIdDetails(HashSet<byte> input, HashSet<byte> output, HashSet<byte> feature)
+            {
+                InputReportIds = input.OrderBy(id => id).ToArray();
+                OutputReportIds = output.OrderBy(id => id).ToArray();
+                FeatureReportIds = feature.OrderBy(id => id).ToArray();
+
+                var combined = new HashSet<byte>(InputReportIds);
+                combined.UnionWith(OutputReportIds);
+                combined.UnionWith(FeatureReportIds);
+                TotalUniqueCount = combined.Count;
+            }
+
+            internal IReadOnlyList<byte> InputReportIds { get; }
+
+            internal IReadOnlyList<byte> OutputReportIds { get; }
+
+            internal IReadOnlyList<byte> FeatureReportIds { get; }
+
+            internal int TotalUniqueCount { get; }
         }
 
         private static int GetTopLevelCollectionIndex(string devicePath)

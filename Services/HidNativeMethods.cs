@@ -49,9 +49,6 @@ namespace CustomHidChecker.Services
         internal static extern bool HidD_FreePreparsedData(IntPtr preparsedData);
 
         [DllImport("hid.dll", SetLastError = true)]
-        internal static extern bool HidD_GetReportDescriptor(SafeFileHandle hidDeviceObject, byte[] reportBuffer, int reportBufferLength);
-
-        [DllImport("hid.dll", SetLastError = true)]
         internal static extern bool HidD_GetProductString(SafeFileHandle hidDeviceObject, byte[] buffer, int bufferLength);
 
         [DllImport("hid.dll", SetLastError = true)]
@@ -68,6 +65,20 @@ namespace CustomHidChecker.Services
 
         [DllImport("hid.dll", SetLastError = true)]
         internal static extern int HidP_GetCaps(IntPtr preparsedData, out HidP_Caps capabilities);
+
+        [DllImport("hid.dll", SetLastError = true)]
+        internal static extern int HidP_GetButtonCaps(
+            HidP_ReportType reportType,
+            [Out] HidP_ButtonCaps[] buttonCaps,
+            ref ushort buttonCapsLength,
+            IntPtr preparsedData);
+
+        [DllImport("hid.dll", SetLastError = true)]
+        internal static extern int HidP_GetValueCaps(
+            HidP_ReportType reportType,
+            [Out] HidP_ValueCaps[] valueCaps,
+            ref ushort valueCapsLength,
+            IntPtr preparsedData);
 
         [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
         private static extern SafeFileHandle CreateFile(
@@ -157,6 +168,99 @@ namespace CustomHidChecker.Services
             public short NumberFeatureButtonCaps;
             public short NumberFeatureValueCaps;
             public short NumberFeatureDataIndices;
+        }
+
+        internal enum HidP_ReportType
+        {
+            Input = 0,
+            Output = 1,
+            Feature = 2
+        }
+
+        [StructLayout(LayoutKind.Sequential, Pack = 1)]
+        internal struct HidP_Range
+        {
+            public ushort UsageMin;
+            public ushort UsageMax;
+            public ushort StringMin;
+            public ushort StringMax;
+            public ushort DesignatorMin;
+            public ushort DesignatorMax;
+            public ushort DataIndexMin;
+            public ushort DataIndexMax;
+        }
+
+        [StructLayout(LayoutKind.Sequential, Pack = 1)]
+        internal struct HidP_NotRange
+        {
+            public ushort Usage;
+            public ushort Reserved1;
+            public ushort StringIndex;
+            public ushort Reserved2;
+            public ushort DesignatorIndex;
+            public ushort Reserved3;
+            public ushort DataIndex;
+            public ushort Reserved4;
+        }
+
+        [StructLayout(LayoutKind.Explicit, Pack = 1)]
+        internal struct HidP_RangeUnion
+        {
+            [FieldOffset(0)]
+            public HidP_Range Range;
+
+            [FieldOffset(0)]
+            public HidP_NotRange NotRange;
+        }
+
+        [StructLayout(LayoutKind.Sequential, Pack = 1)]
+        internal struct HidP_ButtonCaps
+        {
+            public ushort UsagePage;
+            public byte ReportID;
+            public byte IsAlias;
+            public ushort BitField;
+            public ushort LinkCollection;
+            public ushort LinkUsage;
+            public ushort LinkUsagePage;
+            public byte IsRange;
+            public byte IsStringRange;
+            public byte IsDesignatorRange;
+            public byte IsAbsolute;
+            public ushort ReportCount;
+            public ushort Reserved2;
+            [MarshalAs(UnmanagedType.ByValArray, SizeConst = 9, ArraySubType = UnmanagedType.U4)]
+            public uint[] Reserved;
+            public HidP_RangeUnion Range;
+        }
+
+        [StructLayout(LayoutKind.Sequential, Pack = 1)]
+        internal struct HidP_ValueCaps
+        {
+            public ushort UsagePage;
+            public byte ReportID;
+            public byte IsAlias;
+            public ushort BitField;
+            public ushort LinkCollection;
+            public ushort LinkUsage;
+            public ushort LinkUsagePage;
+            public byte IsRange;
+            public byte IsStringRange;
+            public byte IsDesignatorRange;
+            public byte IsAbsolute;
+            public byte HasNull;
+            public byte Reserved;
+            public ushort BitSize;
+            public ushort ReportCount;
+            [MarshalAs(UnmanagedType.ByValArray, SizeConst = 5, ArraySubType = UnmanagedType.U2)]
+            public ushort[] Reserved2;
+            public uint UnitsExp;
+            public uint Units;
+            public int LogicalMin;
+            public int LogicalMax;
+            public int PhysicalMin;
+            public int PhysicalMax;
+            public HidP_RangeUnion Range;
         }
 
         [StructLayout(LayoutKind.Sequential)]
