@@ -14,7 +14,7 @@ namespace CustomHidChecker.ViewModels
     public sealed class MainViewModel : ObservableObject
     {
         private readonly ObservableCollection<HidDeviceInfo> _devices;
-        private readonly Func<IHidDevice> _deviceFactory;
+        private readonly Func<IHidClassDescriptor> _deviceFactory;
         private readonly DeviceDiscoveryService _deviceDiscovery;
         private readonly DeviceLogService _logService;
         private readonly HidReportFormatter _reportFormatter;
@@ -36,7 +36,7 @@ namespace CustomHidChecker.ViewModels
         {
         }
 
-        public MainViewModel(Func<IHidDevice> deviceFactory)
+        public MainViewModel(Func<IHidClassDescriptor> deviceFactory)
         {
             _deviceFactory = deviceFactory;
             _devices = new ObservableCollection<HidDeviceInfo>();

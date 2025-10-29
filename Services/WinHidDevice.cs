@@ -8,7 +8,7 @@ using Microsoft.Win32.SafeHandles;
 
 namespace CustomHidChecker.Services
 {
-    public sealed class WinHidDevice : IHidDevice
+    public sealed class WinHidDevice : IHidClassDescriptor
     {
         private SafeFileHandle? _handle;
         private FileStream? _readStream;

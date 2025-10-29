@@ -90,16 +90,6 @@
                                 <TextBox Text="{Binding DescriptorInfo.EndpointDescriptor, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap" AcceptsReturn="True" BorderThickness="0" Background="Transparent" />
                             </ScrollViewer>
                         </TabItem>
-                        <TabItem Header="HID">
-                            <ScrollViewer VerticalScrollBarVisibility="Auto">
-                                <TextBox Text="{Binding DescriptorInfo.HidDescriptor, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap" AcceptsReturn="True" BorderThickness="0" Background="Transparent" />
-                            </ScrollViewer>
-                        </TabItem>
-                        <TabItem Header="Report">
-                            <ScrollViewer VerticalScrollBarVisibility="Auto">
-                                <TextBox Text="{Binding DescriptorInfo.ReportDescriptor, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap" AcceptsReturn="True" BorderThickness="0" Background="Transparent" FontFamily="Consolas" />
-                            </ScrollViewer>
-                        </TabItem>
                     </TabControl>
                 </GroupBox>
 

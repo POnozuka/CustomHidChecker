@@ -1,12 +1,14 @@
+using Microsoft.Win32.SafeHandles;
 using System;
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
-using Microsoft.Win32.SafeHandles;
+using System.Text;
+using static CustomHidChecker.Services.HidNativeMethods;
 
 namespace CustomHidChecker.Services
 {
-    internal static class HidNativeMethods
+    internal static partial class HidNativeMethods
     {
         internal const int FILE_FLAG_OVERLAPPED = 0x40000000;
         internal const int FILE_SHARE_READ = 1;
@@ -47,9 +49,6 @@ namespace CustomHidChecker.Services
         internal static extern bool HidD_FreePreparsedData(IntPtr preparsedData);
 
         [DllImport("hid.dll", SetLastError = true)]
-        internal static extern bool HidD_GetHidDescriptor(SafeFileHandle hidDeviceObject, ref HidDescriptor descriptor, int descriptorLength);
-
-        [DllImport("hid.dll", SetLastError = true)]
         internal static extern bool HidD_GetReportDescriptor(SafeFileHandle hidDeviceObject, byte[] reportBuffer, int reportBufferLength);
 
         [DllImport("hid.dll", SetLastError = true)]
@@ -57,7 +56,10 @@ namespace CustomHidChecker.Services
 
         [DllImport("hid.dll", SetLastError = true)]
         internal static extern bool HidD_GetManufacturerString(SafeFileHandle hidDeviceObject, byte[] buffer, int bufferLength);
-
+        
+        [DllImport("hid.dll", SetLastError = true)]
+        internal static extern bool HidD_GetSerialNumberString(SafeFileHandle HidDeviceObject, byte[] Buffer, int BufferLength);
+        
         [DllImport("hid.dll", SetLastError = true)]
         internal static extern bool HidD_SetFeature(SafeFileHandle hidDeviceObject, byte[] reportBuffer, int reportBufferLength);
 
@@ -113,6 +115,20 @@ namespace CustomHidChecker.Services
         [DllImport("setupapi.dll", SetLastError = true)]
         internal static extern bool SetupDiDestroyDeviceInfoList(IntPtr deviceInfoSet);
 
+        [DllImport("setupapi.dll", CharSet = CharSet.Auto, SetLastError = true)]
+        internal static extern bool SetupDiGetDeviceInstanceId(
+            IntPtr deviceInfoSet,
+            ref SP_DEVINFO_DATA deviceInfoData,
+            StringBuilder deviceInstanceId,
+            int deviceInstanceIdSize,
+            out int requiredSize);
+
+        [DllImport("setupapi.dll", CharSet = CharSet.Auto, SetLastError = true)]
+        internal static extern bool SetupDiEnumDeviceInfo(
+            IntPtr deviceInfoSet,
+            int memberIndex,
+            ref SP_DEVINFO_DATA deviceInfoData);
+
         [StructLayout(LayoutKind.Sequential)]
         internal struct HidAttributes
         {
@@ -121,25 +137,6 @@ namespace CustomHidChecker.Services
             public ushort ProductID;
             public ushort VersionNumber;
         }
-
-        [StructLayout(LayoutKind.Sequential, Pack = 1)]
-        internal struct HidClassDescriptor
-        {
-            public byte DescriptorType;
-            public ushort DescriptorLength;
-        }
-
-        [StructLayout(LayoutKind.Sequential, Pack = 1)]
-        internal struct HidDescriptor
-        {
-            public byte Length;
-            public byte DescriptorType;
-            public ushort HidSpecification;
-            public byte CountryCode;
-            public byte DescriptorCount;
-            public HidClassDescriptor Descriptor0;
-        }
-
         [StructLayout(LayoutKind.Sequential)]
         internal struct HIDP_CAPS_INTERNAL
         {
@@ -201,6 +198,15 @@ namespace CustomHidChecker.Services
             public string DevicePath;
         }
 
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct SP_DEVINFO_DATA
+        {
+            public int cbSize;
+            public Guid ClassGuid;
+            public int DevInst;
+            public IntPtr Reserved;
+        }
+
         [Flags]
         internal enum SetupDiGetClassDevsFlags : uint
         {
@@ -238,33 +244,6 @@ namespace CustomHidChecker.Services
             }
 
             return false;
-        }
-
-        internal static HidDescriptor GetHidDescriptor(SafeFileHandle handle)
-        {
-            var descriptor = new HidDescriptor
-            {
-                Length = (byte)Marshal.SizeOf<HidDescriptor>()
-            };
-
-            if (!HidD_GetHidDescriptor(handle, ref descriptor, Marshal.SizeOf<HidDescriptor>()))
-            {
-                throw new Win32Exception(Marshal.GetLastWin32Error());
-            }
-
-            return descriptor;
-        }
-
-        internal static byte[] GetReportDescriptor(SafeFileHandle handle, int expectedLength)
-        {
-            var length = expectedLength > 0 ? expectedLength : 1024;
-            var buffer = new byte[length];
-            if (HidD_GetReportDescriptor(handle, buffer, buffer.Length))
-            {
-                return buffer;
-            }
-
-            throw new Win32Exception(Marshal.GetLastWin32Error());
         }
 
         internal static string GetLastErrorMessage()

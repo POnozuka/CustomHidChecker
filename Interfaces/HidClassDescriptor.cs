@@ -4,7 +4,7 @@ using System.Threading.Tasks;
 
 namespace CustomHidChecker.Interfaces
 {
-    public interface IHidDevice : IDisposable
+    public interface IHidClassDescriptor : IDisposable
     {
         bool IsOpen { get; }
 

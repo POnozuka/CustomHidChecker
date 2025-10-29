@@ -1,6 +1,3 @@
-using System;
-using System.Threading;
-using System.Threading.Tasks;
 using CustomHidChecker.Interfaces;
 using CustomHidChecker.Models;
 
@@ -8,11 +5,11 @@ namespace CustomHidChecker.Services
 {
     public sealed class HidDeviceSession : IDisposable
     {
-        private readonly Func<IHidDevice> _deviceFactory;
-        private IHidDevice? _device;
+        private readonly Func<IHidClassDescriptor> _deviceFactory;
+        private IHidClassDescriptor? _device;
         private CancellationTokenSource? _readLoopCts;
 
-        public HidDeviceSession(Func<IHidDevice> deviceFactory)
+        public HidDeviceSession(Func<IHidClassDescriptor> deviceFactory)
         {
             _deviceFactory = deviceFactory;
         }

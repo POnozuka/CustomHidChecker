@@ -13,7 +13,9 @@ namespace CustomHidChecker.Models
             int outputReportLength,
             int featureReportLength,
             string? productName,
-            string? manufacturerName)
+            string? manufacturerName,
+            string? instanceId,
+            string? serialNumber)
         {
             DevicePath = devicePath ?? throw new ArgumentNullException(nameof(devicePath));
             VendorId = vendorId;
@@ -24,6 +26,8 @@ namespace CustomHidChecker.Models
             FeatureReportLength = featureReportLength;
             ProductName = productName;
             ManufacturerName = manufacturerName;
+            InstanceId = instanceId;
+            SerialNumber = serialNumber;
         }
 
         public string DevicePath { get; }
@@ -43,6 +47,11 @@ namespace CustomHidChecker.Models
         public string? ProductName { get; }
 
         public string? ManufacturerName { get; }
+
+        public string? InstanceId { get; }
+
+        public string? SerialNumber { get; }
+
 
         public string DisplayName => string.IsNullOrWhiteSpace(ProductName)
             ? $"VID:0x{VendorId:X4}, PID:0x{ProductId:X4}"
