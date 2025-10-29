@@ -2,6 +2,7 @@ using System;
 using System.Runtime.InteropServices;
 using System.Text;
 using CustomHidChecker.Models;
+using Microsoft.Win32.SafeHandles;
 
 namespace CustomHidChecker.Services
 {
@@ -9,7 +10,7 @@ namespace CustomHidChecker.Services
     {
         public UsbDescriptorInfo GetDescriptors(HidDeviceInfo info)
         {
-            var deviceDescriptor = BuildDeviceDescriptor(info);
+            string deviceDescriptor;
             var configurationDescriptor = "未取得";
             var interfaceDescriptor = "未取得";
             var endpointDescriptor = "未取得";
@@ -17,23 +18,13 @@ namespace CustomHidChecker.Services
             try
             {
                 using var handle = HidNativeMethods.CreateFileForReadWrite(info.DevicePath);
-
-                var attributes = new HidNativeMethods.HidAttributes
-                {
-                    Size = Marshal.SizeOf<HidNativeMethods.HidAttributes>()
-                };
-
-
-                if (HidNativeMethods.HidD_GetAttributes(handle, ref attributes))
-                {
-                    deviceDescriptor = BuildDeviceDescriptor(info, attributes);
-                }
+                deviceDescriptor = GetDeviceDescriptorText(info, handle);
 
                 if (HidNativeMethods.TryGetCapabilities(handle, out var caps))
                 {
-                    configurationDescriptor = BuildConfigurationDescriptor(caps);
-                    interfaceDescriptor = BuildInterfaceDescriptor(caps);
-                    endpointDescriptor = BuildEndpointDescriptor(caps);
+                    configurationDescriptor = GetConfigurationDescriptorText(caps);
+                    interfaceDescriptor = GetInterfaceDescriptorText(caps);
+                    endpointDescriptor = GetEndpointDescriptorText(caps);
                 }
                 else
                 {
@@ -45,6 +36,7 @@ namespace CustomHidChecker.Services
             catch (Exception ex)
             {
                 var failure = $"取得失敗: {ex.Message}";
+                deviceDescriptor = GetDeviceDescriptorText(info);
                 configurationDescriptor = failure;
                 interfaceDescriptor = failure;
                 endpointDescriptor = failure;
@@ -57,80 +49,90 @@ namespace CustomHidChecker.Services
                 endpointDescriptor);
         }
 
-        private static string BuildDeviceDescriptor(HidDeviceInfo info)
+        private static string GetDeviceDescriptorText(HidDeviceInfo info, SafeFileHandle? handle = null)
         {
+            HidNativeMethods.HidAttributes? attributes = null;
+
+            if (handle is not null)
+            {
+                var nativeAttributes = new HidNativeMethods.HidAttributes
+                {
+                    Size = Marshal.SizeOf<HidNativeMethods.HidAttributes>()
+                };
+
+                if (HidNativeMethods.HidD_GetAttributes(handle, ref nativeAttributes))
+                {
+                    attributes = nativeAttributes;
+                }
+            }
+
             var builder = new StringBuilder();
-            builder.AppendLine($"ベンダID: 0x{info.VendorId:X4}");
-            builder.AppendLine($"プロダクトID: 0x{info.ProductId:X4}");
-            builder.AppendLine($"リリース番号: 0x{info.VersionNumber:X4}");
-            builder.AppendLine($"デバイスパス: {info.DevicePath}");
+            var vendorId = attributes?.VendorID ?? info.VendorId;
+            var productId = attributes?.ProductID ?? info.ProductId;
+            var versionNumber = attributes?.VersionNumber ?? info.VersionNumber;
+            builder.AppendLine($"Vendor ID: 0x{vendorId:X4}");
+            builder.AppendLine($"Product ID: 0x{productId:X4}");
+            builder.AppendLine($"Release Number: 0x{versionNumber:X4}");
+            builder.AppendLine($"Device Path: {info.DevicePath}");
+            builder.AppendLine($"Input Report Length: {Math.Max(info.InputReportLength, 0)} bytes");
+            builder.AppendLine($"Output Report Length: {Math.Max(info.OutputReportLength, 0)} bytes");
+            builder.AppendLine($"Feature Report Length: {Math.Max(info.FeatureReportLength, 0)} bytes");
 
             if (!string.IsNullOrWhiteSpace(info.ManufacturerName))
             {
-                builder.AppendLine($"ベンダ名: {info.ManufacturerName}");
+                builder.AppendLine($"Vendor Name: {info.ManufacturerName}");
             }
 
             if (!string.IsNullOrWhiteSpace(info.ProductName))
             {
-                builder.AppendLine($"製品名: {info.ProductName}");
+                builder.AppendLine($"Product Name: {info.ProductName}");
+            }
+
+            if (!string.IsNullOrWhiteSpace(info.InstanceId))
+            {
+                builder.AppendLine($"Instance ID: {info.InstanceId}");
+            }
+
+            if (!string.IsNullOrWhiteSpace(info.SerialNumber))
+            {
+                builder.AppendLine($"Serial Number: {info.SerialNumber}");
             }
 
             return builder.ToString().TrimEnd();
         }
 
-        private static string BuildDeviceDescriptor(HidDeviceInfo info, HidNativeMethods.HidAttributes attributes)
+        private static string GetConfigurationDescriptorText(HidNativeMethods.HidP_Caps caps)
         {
             var builder = new StringBuilder();
-            builder.AppendLine($"ベンダID: 0x{attributes.VendorID:X4}");
-            builder.AppendLine($"プロダクトID: 0x{attributes.ProductID:X4}");
-            builder.AppendLine($"リリース番号: 0x{attributes.VersionNumber:X4}");
-            builder.AppendLine($"デバイスパス: {info.DevicePath}");
-
-            if (!string.IsNullOrWhiteSpace(info.ManufacturerName))
-            {
-                builder.AppendLine($"ベンダ名: {info.ManufacturerName}");
-            }
-
-            if (!string.IsNullOrWhiteSpace(info.ProductName))
-            {
-                builder.AppendLine($"製品名: {info.ProductName}");
-            }
-
-            return builder.ToString().TrimEnd();
-        }
-
-        private static string BuildConfigurationDescriptor(HidNativeMethods.HidP_Caps caps)
-        {
-            var builder = new StringBuilder();
-            builder.AppendLine("構成数: 1");
-            builder.AppendLine("電源要件: 不明 (HIDクラスAPIでは取得不可)");
-            builder.AppendLine($"Input Report 長: {Math.Max(caps.InputReportByteLength, (short)0)} バイト");
-            builder.AppendLine($"Output Report 長: {Math.Max(caps.OutputReportByteLength, (short)0)} バイト");
-            builder.AppendLine($"Feature Report 長: {Math.Max(caps.FeatureReportByteLength, (short)0)} バイト");
+            builder.AppendLine("Number of Configurations: 1");
+            builder.AppendLine("Power Requirements: Unknown (not available via HID class API)");
+            builder.AppendLine($"Input Report Length: {Math.Max(caps.InputReportByteLength, (short)0)} bytes");
+            builder.AppendLine($"Output Report Length: {Math.Max(caps.OutputReportByteLength, (short)0)} bytes");
+            builder.AppendLine($"Feature Report Length: {Math.Max(caps.FeatureReportByteLength, (short)0)} bytes");
             return builder.ToString();
         }
 
-        private static string BuildInterfaceDescriptor(HidNativeMethods.HidP_Caps caps)
+        private static string GetInterfaceDescriptorText(HidNativeMethods.HidP_Caps caps)
         {
             var builder = new StringBuilder();
             builder.AppendLine($"Usage Page: 0x{(ushort)caps.UsagePage:X4}");
             builder.AppendLine($"Usage: 0x{(ushort)caps.Usage:X4}");
-            builder.AppendLine($"入力ボタンCAP数: {caps.NumberInputButtonCaps}");
-            builder.AppendLine($"入力値CAP数: {caps.NumberInputValueCaps}");
-            builder.AppendLine($"出力ボタンCAP数: {caps.NumberOutputButtonCaps}");
-            builder.AppendLine($"出力値CAP数: {caps.NumberOutputValueCaps}");
-            builder.AppendLine($"FeatureボタンCAP数: {caps.NumberFeatureButtonCaps}");
-            builder.AppendLine($"Feature値CAP数: {caps.NumberFeatureValueCaps}");
+            builder.AppendLine($"Number of Input Button Caps: {caps.NumberInputButtonCaps}");
+            builder.AppendLine($"Number of Input Value Caps: {caps.NumberInputValueCaps}");
+            builder.AppendLine($"Number of Output Button Caps: {caps.NumberOutputButtonCaps}");
+            builder.AppendLine($"Number of Output Value Caps: {caps.NumberOutputValueCaps}");
+            builder.AppendLine($"Number of Feature Button Caps: {caps.NumberFeatureButtonCaps}");
+            builder.AppendLine($"Number of Feature Value Caps: {caps.NumberFeatureValueCaps}");
             return builder.ToString();
         }
 
-        private static string BuildEndpointDescriptor(HidNativeMethods.HidP_Caps caps)
+        private static string GetEndpointDescriptorText(HidNativeMethods.HidP_Caps caps)
         {
             var builder = new StringBuilder();
-            builder.AppendLine($"INエンドポイント: {(caps.InputReportByteLength > 0 ? $"Interrupt / Report長 {caps.InputReportByteLength} バイト" : "なし")}");
-            builder.AppendLine($"OUTエンドポイント: {(caps.OutputReportByteLength > 0 ? $"Interrupt / Report長 {caps.OutputReportByteLength} バイト" : "なし")}");
-            builder.AppendLine($"Featureパス: {(caps.FeatureReportByteLength > 0 ? $"Report長 {caps.FeatureReportByteLength} バイト" : "なし")}");
-            builder.AppendLine("ポーリング間隔: 不明 (HIDクラスAPIでは取得不可)");
+            builder.AppendLine($"IN Endpoint: {(caps.InputReportByteLength > 0 ? $"Interrupt / Report Length {caps.InputReportByteLength} bytes" : "None")}");
+            builder.AppendLine($"OUT Endpoint: {(caps.OutputReportByteLength > 0 ? $"Interrupt / Report Length {caps.OutputReportByteLength} bytes" : "None")}");
+            builder.AppendLine($"Feature Report: {(caps.FeatureReportByteLength > 0 ? $"Report Length {caps.FeatureReportByteLength} bytes" : "None")}");
+            builder.AppendLine("Polling Interval: Unknown (not available via HID class API)");
             return builder.ToString();
         }
     }
