@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Globalization;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -37,7 +38,7 @@ namespace CustomHidChecker.Services
             foreach (var device in devices)
             {
                 Debug.WriteLine(
-                    $"HID Device: Path={device.DevicePath}, VID=0x{device.VendorId:X4}, PID=0x{device.ProductId:X4}, Version=0x{device.VersionNumber:X4}, Input={device.InputReportLength}, Output={device.OutputReportLength}, Feature={device.FeatureReportLength}, ProductName={device.ProductName ?? "(null)"}, ManufacturerName={device.ManufacturerName ?? "(null)"}, InstanceId={device.InstanceId ?? "(null)"}, SerialNumber={device.SerialNumber ?? "(null)"}");
+                    $"HID Device: Path={device.DevicePath}, VID=0x{device.VendorId:X4}, PID=0x{device.ProductId:X4}, Version=0x{device.VersionNumber:X4}, Input={device.InputReportLength}, Output={device.OutputReportLength}, Feature={device.FeatureReportLength}, TLCIndex={device.TopLevelCollectionIndex}/{device.TopLevelCollectionTotal}, TLCNodes={device.TopLevelCollectionCount}, ProductName={device.ProductName ?? "(null)"}, ManufacturerName={device.ManufacturerName ?? "(null)"}, InstanceId={device.InstanceId ?? "(null)"}, SerialNumber={device.SerialNumber ?? "(null)"}");
             }
 
             return devices;
@@ -191,6 +192,36 @@ namespace CustomHidChecker.Services
                 // 7. Serial number (if available)
                 var serialNumber = HidNativeMethods.GetStringProperty(handle, HidNativeMethods.HidD_GetSerialNumberString);
 
+                var topLevelCollectionIndex = GetTopLevelCollectionIndex(devicePath);
+                if (topLevelCollectionIndex <= 0)
+                {
+                    topLevelCollectionIndex = 1;
+                }
+
+                var topLevelCollectionTotal = Math.Max(1, (int)caps.NumberLinkCollectionNodes);
+
+                try
+                {
+                    var reportDescriptor = TryGetReportDescriptor(handle);
+                    if (reportDescriptor is { Length: > 0 })
+                    {
+                        var counted = CountTopLevelCollections(reportDescriptor);
+                        if (counted > 0)
+                        {
+                            topLevelCollectionTotal = counted;
+                        }
+                    }
+                }
+                catch
+                {
+                    topLevelCollectionTotal = Math.Max(topLevelCollectionTotal, 1);
+                }
+
+                if (topLevelCollectionTotal < topLevelCollectionIndex)
+                {
+                    topLevelCollectionTotal = topLevelCollectionIndex;
+                }
+
                 // 8. Build HidDeviceInfo (including new fields)
                 return new HidDeviceInfo(
                     devicePath,
@@ -200,10 +231,13 @@ namespace CustomHidChecker.Services
                     caps.InputReportByteLength,
                     caps.OutputReportByteLength,
                     caps.FeatureReportByteLength,
+                    caps.NumberLinkCollectionNodes,
                     string.IsNullOrWhiteSpace(productName) ? null : productName,
                     string.IsNullOrWhiteSpace(manufacturerName) ? null : manufacturerName,
                     string.IsNullOrWhiteSpace(instanceId) ? null : instanceId,
-                    string.IsNullOrWhiteSpace(serialNumber) ? null : serialNumber
+                    string.IsNullOrWhiteSpace(serialNumber) ? null : serialNumber,
+                    topLevelCollectionIndex,
+                    topLevelCollectionTotal
                 );
             }
             catch
@@ -211,5 +245,143 @@ namespace CustomHidChecker.Services
                 return null;
             }
         }
+
+        private static byte[]? TryGetReportDescriptor(SafeFileHandle handle)
+        {
+            var buffer = new byte[4096];
+            if (!HidNativeMethods.HidD_GetReportDescriptor(handle, buffer, buffer.Length))
+            {
+                return null;
+            }
+
+            var length = buffer.Length;
+            while (length > 0 && buffer[length - 1] == 0)
+            {
+                length--;
+            }
+
+            if (length <= 0)
+            {
+                return null;
+            }
+
+            if (length == buffer.Length)
+            {
+                return buffer;
+            }
+
+            var descriptor = new byte[length];
+            Array.Copy(buffer, descriptor, length);
+            return descriptor;
+        }
+
+        private static int CountTopLevelCollections(byte[] descriptor)
+        {
+            var depth = 0;
+            var topLevelCount = 0;
+            var index = 0;
+
+            while (index < descriptor.Length)
+            {
+                var prefix = descriptor[index++];
+
+                if (prefix == 0xFE)
+                {
+                    if (index + 1 >= descriptor.Length)
+                    {
+                        break;
+                    }
+
+                    var size = descriptor[index];
+                    index += 2;
+                    if (index + size > descriptor.Length)
+                    {
+                        break;
+                    }
+
+                    index += size;
+                    continue;
+                }
+
+                var sizeCode = prefix & 0x03;
+                var type = (prefix >> 2) & 0x03;
+                var tag = (prefix >> 4) & 0x0F;
+
+                var dataLength = sizeCode switch
+                {
+                    0 => 0,
+                    1 => 1,
+                    2 => 2,
+                    3 => 4,
+                    _ => 0
+                };
+
+                if (index + dataLength > descriptor.Length)
+                {
+                    break;
+                }
+
+                if (type == 0 && tag == 0x0A)
+                {
+                    if (depth == 0)
+                    {
+                        topLevelCount++;
+                    }
+
+                    depth++;
+                }
+                else if (type == 0 && tag == 0x0C)
+                {
+                    if (depth > 0)
+                    {
+                        depth--;
+                    }
+                }
+
+                index += dataLength;
+            }
+
+            return topLevelCount > 0 ? topLevelCount : 1;
+        }
+
+        private static int GetTopLevelCollectionIndex(string devicePath)
+        {
+            if (string.IsNullOrWhiteSpace(devicePath))
+            {
+                return 1;
+            }
+
+            var colMarkerIndex = devicePath.IndexOf("&col", StringComparison.OrdinalIgnoreCase);
+            if (colMarkerIndex < 0)
+            {
+                return 1;
+            }
+
+            var start = colMarkerIndex + 4;
+            var end = start;
+            while (end < devicePath.Length && char.IsLetterOrDigit(devicePath[end]))
+            {
+                end++;
+            }
+
+            if (end <= start)
+            {
+                return 1;
+            }
+
+            var slice = devicePath.Substring(start, end - start);
+            if (int.TryParse(slice, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var value))
+            {
+                return value > 0 ? value : 1;
+            }
+
+            if (int.TryParse(slice, NumberStyles.Integer, CultureInfo.InvariantCulture, out value))
+            {
+                return value > 0 ? value : 1;
+            }
+
+            return 1;
+        }
+
     }
 }

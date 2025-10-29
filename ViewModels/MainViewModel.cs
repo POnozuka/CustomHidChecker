@@ -419,8 +419,10 @@ namespace CustomHidChecker.ViewModels
             var inputLength = info.InputReportLength > 0 ? info.InputReportLength.ToString() : "不明";
             var outputLength = info.OutputReportLength > 0 ? info.OutputReportLength.ToString() : "不明";
             var featureLength = info.FeatureReportLength > 0 ? info.FeatureReportLength.ToString() : "不明";
+            var topLevelCollections = info.TopLevelCollectionCount > 0 ? info.TopLevelCollectionCount.ToString() : "不明";
+            var topLevelCollectionPosition = info.TopLevelCollectionIndex;
 
-            return $"名称: {info.DisplayName}\nVID:0x{info.VendorId:X4} / PID:0x{info.ProductId:X4} / バージョン: 0x{info.VersionNumber:X4}\nInput Report: {inputLength} bytes / Output Report: {outputLength} bytes / Feature Report: {featureLength} bytes";
+            return $"名称: {info.DisplayName}\nVID:0x{info.VendorId:X4} / PID:0x{info.ProductId:X4} / バージョン: 0x{info.VersionNumber:X4} / TLC: {topLevelCollectionPosition} (Nodes: {topLevelCollections})\nInput Report: {inputLength} bytes / Output Report: {outputLength} bytes / Feature Report: {featureLength} bytes";
         }
 
         private void UpdateLastInputReport(byte[] data)

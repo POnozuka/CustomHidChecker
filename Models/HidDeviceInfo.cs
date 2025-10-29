@@ -12,10 +12,13 @@ namespace CustomHidChecker.Models
             int inputReportLength,
             int outputReportLength,
             int featureReportLength,
+            short topLevelCollectionCount,
             string? productName,
             string? manufacturerName,
             string? instanceId,
-            string? serialNumber)
+            string? serialNumber,
+            int topLevelCollectionIndex,
+            int topLevelCollectionTotal)
         {
             DevicePath = devicePath ?? throw new ArgumentNullException(nameof(devicePath));
             VendorId = vendorId;
@@ -24,10 +27,13 @@ namespace CustomHidChecker.Models
             InputReportLength = inputReportLength;
             OutputReportLength = outputReportLength;
             FeatureReportLength = featureReportLength;
+            TopLevelCollectionCount = topLevelCollectionCount;
             ProductName = productName;
             ManufacturerName = manufacturerName;
             InstanceId = instanceId;
             SerialNumber = serialNumber;
+            TopLevelCollectionIndex = topLevelCollectionIndex;
+            TopLevelCollectionTotal = topLevelCollectionTotal;
         }
 
         public string DevicePath { get; }
@@ -44,6 +50,12 @@ namespace CustomHidChecker.Models
 
         public int FeatureReportLength { get; }
 
+        public short TopLevelCollectionCount { get; }
+
+        public int TopLevelCollectionIndex { get; }
+
+        public int TopLevelCollectionTotal { get; }
+
         public string? ProductName { get; }
 
         public string? ManufacturerName { get; }
@@ -53,8 +65,18 @@ namespace CustomHidChecker.Models
         public string? SerialNumber { get; }
 
 
-        public string DisplayName => string.IsNullOrWhiteSpace(ProductName)
-            ? $"VID:0x{VendorId:X4}, PID:0x{ProductId:X4}"
-            : $"{ProductName} (VID:0x{VendorId:X4}, PID:0x{ProductId:X4})";
+        public string DisplayName
+        {
+            get
+            {
+                var baseName = string.IsNullOrWhiteSpace(ProductName)
+                    ? $"VID:0x{VendorId:X4}, PID:0x{ProductId:X4}"
+                    : $"{ProductName} (VID:0x{VendorId:X4}, PID:0x{ProductId:X4})";
+
+                return TopLevelCollectionIndex > 1
+                    ? $"{baseName} [TLC #{TopLevelCollectionIndex}]"
+                    : baseName;
+            }
+        }
     }
 }
