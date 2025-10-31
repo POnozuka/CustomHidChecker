@@ -36,53 +36,58 @@ namespace CustomHidChecker.Services
             }
 
             var span = input.AsSpan().Trim();
-            var buffer = new Span<byte>(new byte[(span.Length / 2) + 1]);
-            var index = 0;
-            var temp = new Span<char>(new char[2]);
-            var hasHighNibble = false;
+            var buffer = new Span<byte>(new byte[((span.Length + 1) / 2)]);
+            var byteCount = 0;
 
-            for (var i = 0; i < span.Length; i++)
+            var i = 0;
+            while (i < span.Length)
             {
-                var c = span[i];
-                if (char.IsWhiteSpace(c))
-                {
-                    if (hasHighNibble)
-                    {
-                        return false;
-                    }
+                while (i < span.Length && char.IsWhiteSpace(span[i])) i++;
+                if (i >= span.Length) break;
 
+                var start = i;
+                while (i < span.Length && !char.IsWhiteSpace(span[i])) i++;
+                var token = span[start..i];
+                if (token.IsEmpty)
+                {
                     continue;
                 }
 
-                if (!Uri.IsHexDigit(c))
+                byte value;
+                if (token.Length >= 3 && (token[0] == '0') && (token[1] == 'x' || token[1] == 'X'))
+                {
+                    var hexPart = token[2..];
+                    if (hexPart.IsEmpty)
+                    {
+                        return false;
+                    }
+                    if (!byte.TryParse(hexPart, NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out value))
+                    {
+                        return false;
+                    }
+                }
+                else
+                {
+                    if (!byte.TryParse(token, NumberStyles.None, CultureInfo.InvariantCulture, out value))
+                    {
+                        return false;
+                    }
+                }
+
+                if (byteCount >= buffer.Length)
                 {
                     return false;
                 }
-
-                temp[index % 2] = c;
-                hasHighNibble = !hasHighNibble;
-                if (!hasHighNibble)
-                {
-                    buffer[index / 2] = byte.Parse(temp, NumberStyles.HexNumber, CultureInfo.InvariantCulture);
-                    index += 2;
-                }
+                buffer[byteCount++] = value;
             }
 
-            if (hasHighNibble)
-            {
-                temp[1] = '0';
-                buffer[index / 2] = byte.Parse(temp, NumberStyles.HexNumber, CultureInfo.InvariantCulture);
-                index += 2;
-            }
-
-            var length = index / 2;
-            if (length > destination.Length)
+            if (byteCount > destination.Length)
             {
                 return false;
             }
 
-            buffer[..length].CopyTo(destination);
-            bytesWritten = length;
+            buffer[..byteCount].CopyTo(destination);
+            bytesWritten = byteCount;
             return true;
         }
     }

@@ -110,7 +110,10 @@
                             <TextBlock Text="送信長(バイト):" VerticalAlignment="Center" Margin="0,0,8,0" />
                             <TextBox Text="{Binding OutputReportLengthText, UpdateSourceTrigger=PropertyChanged}" Width="100" />
                         </StackPanel>
-                        <Button Content="送信" Command="{Binding SendOutputCommand}" Padding="12 6" HorizontalAlignment="Right" />
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
+                            <TextBlock Text="{Binding OutputStatusMessage}" VerticalAlignment="Center" Margin="8,0,0,0" />
+                            <Button Content="送信" Command="{Binding SendOutputCommand}" Padding="12 6" />
+                        </StackPanel>
                     </StackPanel>
                 </GroupBox>
 

@@ -24,6 +24,7 @@ namespace CustomHidChecker.ViewModels
         private string _outputReportText = string.Empty;
         private string _featureReportText = string.Empty;
         private string _statusMessage = "準備完了";
+        private string _outputStatusMessage = string.Empty;
         private string _connectedDeviceDetails = "未接続";
         private string _lastInputReport = "未受信";
         private string _lastInputReportTimestamp = "-";
@@ -99,6 +100,12 @@ namespace CustomHidChecker.ViewModels
         {
             get => _statusMessage;
             set => SetProperty(ref _statusMessage, value);
+        }
+
+        public string OutputStatusMessage
+        {
+            get => _outputStatusMessage;
+            set => SetProperty(ref _outputStatusMessage, value);
         }
 
         public string ConnectedDeviceDetails
@@ -291,6 +298,7 @@ namespace CustomHidChecker.ViewModels
 
             _ = Task.Run(async () =>
             {
+                OutputStatusMessage = $"{report!.Length}byte 送信します";
                 var success = await _session.WriteOutputAsync(report!, CancellationToken.None).ConfigureAwait(false);
                 Application.Current.Dispatcher.Invoke(() =>
                 {
