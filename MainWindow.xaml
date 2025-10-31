@@ -5,7 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:viewModels="clr-namespace:CustomHidChecker.ViewModels"
         mc:Ignorable="d"
-        Title="Custom HID Checker" Height="800" Width="1200" MinHeight="500" MinWidth="800">
+        Title="Custom HID Checker" Height="1200" Width="1200" MinHeight="500" MinWidth="800">
     <Window.DataContext>
         <viewModels:MainViewModel />
     </Window.DataContext>
