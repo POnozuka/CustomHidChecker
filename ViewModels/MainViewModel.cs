@@ -30,6 +30,7 @@ namespace CustomHidChecker.ViewModels
         private UsbDescriptorInfo _descriptorInfo = UsbDescriptorInfo.Empty;
         private bool _isConnected;
         private bool _isBusy;
+        private string _outputReportLengthText = string.Empty;
 
         public MainViewModel()
             : this(() => new WinHidDevice())
@@ -80,6 +81,12 @@ namespace CustomHidChecker.ViewModels
         {
             get => _outputReportText;
             set => SetProperty(ref _outputReportText, value);
+        }
+
+        public string OutputReportLengthText
+        {
+            get => _outputReportLengthText;
+            set => SetProperty(ref _outputReportLengthText, value);
         }
 
         public string FeatureReportText
@@ -260,7 +267,21 @@ namespace CustomHidChecker.ViewModels
             }
 
             var deviceInfo = SelectedDevice;
-            var length = _reportFormatter.NormalizeLength(deviceInfo.OutputReportLength);
+            var deviceLength = deviceInfo.OutputReportLength;
+            int lengthSetting = 0;
+            var lengthText = OutputReportLengthText?.Trim();
+            if (!string.IsNullOrEmpty(lengthText))
+            {
+                if (!int.TryParse(lengthText, out lengthSetting) || lengthSetting < 0)
+                {
+                    StatusMessage = "Output Report長が不正";
+                    AddLog(DeviceLogDirection.Error, StatusMessage);
+                    return;
+                }
+            }
+
+            var baseLength = lengthSetting > 0 ? lengthSetting : deviceLength;
+            var length = _reportFormatter.NormalizeLength(baseLength);
             if (!_reportFormatter.TryCreateReport(OutputReportText, length, out var report, out var errorMessage))
             {
                 StatusMessage = errorMessage ?? "出力データが不正";
