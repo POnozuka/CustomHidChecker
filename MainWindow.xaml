@@ -121,7 +121,12 @@
                     <StackPanel Margin="8">
                         <TextBlock Text="HEXデータを入力 (Report IDを先頭に記載)" />
                         <TextBox Text="{Binding FeatureReportText, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True" Height="80" />
+                        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                            <TextBlock Text="送信長(バイト):" VerticalAlignment="Center" Margin="0,0,8,0" />
+                            <TextBox Text="{Binding FeatureReportLengthText, UpdateSourceTrigger=PropertyChanged}" Width="100" />
+                        </StackPanel>
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="8">
+                            <TextBlock Text="{Binding FeatureStatusMessage}" VerticalAlignment="Center" Margin="8,0,0,0" />
                             <Button Content="取得" Command="{Binding GetFeatureCommand}" Padding="12 6" />
                             <Button Content="送信" Command="{Binding SetFeatureCommand}" Padding="12 6" />
                         </StackPanel>

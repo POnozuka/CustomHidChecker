@@ -25,6 +25,7 @@ namespace CustomHidChecker.ViewModels
         private string _featureReportText = string.Empty;
         private string _statusMessage = "準備完了";
         private string _outputStatusMessage = string.Empty;
+        private string _featureStatusMessage = string.Empty;
         private string _connectedDeviceDetails = "未接続";
         private string _lastInputReport = "未受信";
         private string _lastInputReportTimestamp = "-";
@@ -32,6 +33,7 @@ namespace CustomHidChecker.ViewModels
         private bool _isConnected;
         private bool _isBusy;
         private string _outputReportLengthText = string.Empty;
+        private string _featureReportLengthText = string.Empty;
 
         public MainViewModel()
             : this(() => new WinHidDevice())
@@ -108,6 +110,12 @@ namespace CustomHidChecker.ViewModels
             set => SetProperty(ref _outputStatusMessage, value);
         }
 
+        public string FeatureStatusMessage
+        {
+            get => _featureStatusMessage;
+            set => SetProperty(ref _featureStatusMessage, value);
+        }
+
         public string ConnectedDeviceDetails
         {
             get => _connectedDeviceDetails;
@@ -154,6 +162,12 @@ namespace CustomHidChecker.ViewModels
                     RaiseCommandStates();
                 }
             }
+        }
+
+        public string FeatureReportLengthText
+        {
+            get => _featureReportLengthText;
+            set => SetProperty(ref _featureReportLengthText, value);
         }
 
         public RelayCommand RefreshDevicesCommand { get; }
@@ -353,13 +367,29 @@ namespace CustomHidChecker.ViewModels
             }
 
             var deviceInfo = SelectedDevice;
-            var length = _reportFormatter.NormalizeLength(deviceInfo.FeatureReportLength);
+            var deviceLength = deviceInfo.FeatureReportLength;
+            int lengthSetting = 0;
+            var lengthText = FeatureReportLengthText?.Trim();
+            if (!string.IsNullOrEmpty(lengthText))
+            {
+                if (!int.TryParse(lengthText, out lengthSetting) || lengthSetting < 0)
+                {
+                    StatusMessage = "Feature Report長が不正";
+                    AddLog(DeviceLogDirection.Error, StatusMessage);
+                    return;
+                }
+            }
+
+            var baseLength = lengthSetting > 0 ? lengthSetting : deviceLength;
+            var length = _reportFormatter.NormalizeLength(baseLength);
             if (!_reportFormatter.TryCreateReport(FeatureReportText, length, out var report, out var errorMessage))
             {
                 StatusMessage = errorMessage ?? "Feature Reportが不正";
                 AddLog(DeviceLogDirection.Error, StatusMessage);
                 return;
             }
+
+            FeatureStatusMessage = $"{report!.Length}byte 送信します";
 
             if (_session.TrySetFeature(report!, out var setError))
             {
