@@ -462,15 +462,21 @@ namespace CustomHidChecker.ViewModels
 
         private void OnInputReportReceived(object? sender, byte[] data)
         {
-            AddLog(DeviceLogDirection.Input, "Input Report受信", data);
-            UpdateLastInputReport(data);
+            Application.Current.Dispatcher.InvokeAsync(() =>
+            {
+                AddLog(DeviceLogDirection.Input, "Input Report受信", data);
+                UpdateLastInputReport(data);
+            });
         }
 
         private void OnReadErrorOccurred(object? sender, string message)
         {
-            StatusMessage = $"読み取りエラー: {message}";
-            AddLog(DeviceLogDirection.Error, message);
-            Application.Current.Dispatcher.Invoke(DisconnectDevice);
+            Application.Current.Dispatcher.InvokeAsync(() =>
+            {
+                StatusMessage = $"読み取りエラー: {message}";
+                AddLog(DeviceLogDirection.Error, message);
+                Application.Current.Dispatcher.Invoke(DisconnectDevice);
+            });
         }
 
         private static string BuildDeviceDetails(HidDeviceInfo info)
