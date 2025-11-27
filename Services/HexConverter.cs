@@ -53,25 +53,9 @@ namespace CustomHidChecker.Services
                     continue;
                 }
 
-                byte value;
-                if (token.Length >= 3 && (token[0] == '0') && (token[1] == 'x' || token[1] == 'X'))
+                if (!byte.TryParse(token, NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out var value))
                 {
-                    var hexPart = token[2..];
-                    if (hexPart.IsEmpty)
-                    {
-                        return false;
-                    }
-                    if (!byte.TryParse(hexPart, NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out value))
-                    {
-                        return false;
-                    }
-                }
-                else
-                {
-                    if (!byte.TryParse(token, NumberStyles.None, CultureInfo.InvariantCulture, out value))
-                    {
-                        return false;
-                    }
+                    return false;
                 }
 
                 if (byteCount >= buffer.Length)
